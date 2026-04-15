@@ -147,9 +147,10 @@ async function uploadToDrive(filePath, fileName) {
 
   const response = await drive.files.create({
     requestBody: {
-      name: fileName,
-      mimeType: 'application/pdf'
-    },
+  name: fileName,
+  parents: ["1CtSfuBQCGqF7fgNFRSRlYUt7RLK8Aey8"],
+  mimeType: 'application/pdf'
+},
     media: {
       mimeType: 'application/pdf',
       body: fs.createReadStream(filePath)
