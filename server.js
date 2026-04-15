@@ -1,6 +1,6 @@
 const express = require('express');
+const PDFDocument = require('pdfkit');
 const fs = require('fs');
-const puppeteer = require('puppeteer');
 const { google } = require('googleapis');
 
 const app = express();
@@ -8,27 +8,21 @@ app.use(express.json());
 
 const TOKEN_PATH = '/tmp/token.json';
 
-// ======================
-// 🔐 OAUTH GOOGLE
-// ======================
-
+// 🔐 OAuth2
 const oauth2Client = new google.auth.OAuth2(
   process.env.GOOGLE_CLIENT_ID,
   process.env.GOOGLE_CLIENT_SECRET,
   process.env.GOOGLE_REDIRECT_URI
 );
 
-// Charger token si existe
+// 🔁 Charger token si existe
 if (fs.existsSync(TOKEN_PATH)) {
   const tokens = JSON.parse(fs.readFileSync(TOKEN_PATH));
   oauth2Client.setCredentials(tokens);
   console.log("✅ Token chargé");
 }
 
-// ======================
-// 🔗 AUTH ROUTES
-// ======================
-
+// 🔗 Login Google
 app.get('/auth', (req, res) => {
   const url = oauth2Client.generateAuthUrl({
     access_type: 'offline',
@@ -38,6 +32,7 @@ app.get('/auth', (req, res) => {
   res.redirect(url);
 });
 
+// 🔁 Callback
 app.get('/auth/callback', async (req, res) => {
   const { code } = req.query;
 
@@ -51,103 +46,14 @@ app.get('/auth/callback', async (req, res) => {
   res.send("Google Drive connecté ✅");
 });
 
-// ======================
-// 🎨 TEMPLATE HTML PREMIUM
-// ======================
-
-function generateHTML(content) {
-  return `
-  <html>
-  <head>
-    <style>
-      body {
-        font-family: Arial;
-        padding: 40px;
-        color: #222;
-      }
-
-      h1 {
-        color: #0A66C2;
-        font-size: 28px;
-        border-bottom: 2px solid #eee;
-        padding-bottom: 10px;
-      }
-
-      p {
-        font-size: 14px;
-        line-height: 1.8;
-      }
-
-      .cover {
-        text-align: center;
-        margin-bottom: 60px;
-      }
-
-      .cover h1 {
-        font-size: 42px;
-        border: none;
-      }
-
-      .section {
-        margin-top: 30px;
-      }
-    </style>
-  </head>
-
-  <body>
-
-    <div class="cover">
-      <h1>ADNAYA MEDIA</h1>
-      <p>Document professionnel généré automatiquement 🚀</p>
-    </div>
-
-    <div class="section">
-      <h1>Contenu</h1>
-      <p>${content}</p>
-    </div>
-
-  </body>
-  </html>
-  `;
-}
-
-// ======================
-// 📄 GENERATION PDF PREMIUM
-// ======================
-
-async function createPDF(text, filePath) {
-  const browser = await puppeteer.launch({
-    args: ['--no-sandbox', '--disable-setuid-sandbox']
-  });
-
-  const page = await browser.newPage();
-
-  const html = generateHTML(text);
-
-  await page.setContent(html, { waitUntil: 'networkidle0' });
-
-  await page.pdf({
-    path: filePath,
-    format: 'A4',
-    printBackground: true
-  });
-
-  await browser.close();
-}
-
-// ======================
-// 📤 UPLOAD DRIVE
-// ======================
-
+// 📤 Upload Drive (DOSSIER FIXE 🔥)
 async function uploadToDrive(filePath, fileName) {
-  const drive = google.drive({
-    version: 'v3',
-    auth: oauth2Client
-  });
+  const drive = google.drive({ version: 'v3', auth: oauth2Client });
 
   const response = await drive.files.create({
     requestBody: {
       name: fileName,
+      parents: ["1CtSfuBQCGqF7fgNFRSRlYUt7RLK8Aey8"], // ✅ TON DOSSIER
       mimeType: 'application/pdf'
     },
     media: {
@@ -169,18 +75,12 @@ async function uploadToDrive(filePath, fileName) {
   return `https://drive.google.com/file/d/${fileId}/view`;
 }
 
-// ======================
-// 🟢 ROUTES
-// ======================
-
+// 🟢 Test
 app.get('/', (req, res) => {
   res.send("✅ ADNAYA SERVER IS RUNNING");
 });
 
-// ======================
-// 🚀 API PRINCIPALE
-// ======================
-
+// 📄 Génération PDF + upload
 app.post('/generate-pdf', async (req, res) => {
   try {
     const { text } = req.body;
@@ -188,27 +88,38 @@ app.post('/generate-pdf', async (req, res) => {
     const fileName = `file_${Date.now()}.pdf`;
     const filePath = `/tmp/${fileName}`;
 
-    console.log("📄 Génération PDF PREMIUM...");
+    const doc = new PDFDocument();
+    const stream = fs.createWriteStream(filePath);
 
-    await createPDF(text, filePath);
+    doc.pipe(stream);
+    doc.text(text);
+    doc.end();
 
-    console.log("✅ PDF créé");
+    stream.on('finish', async () => {
+      try {
+        const link = await uploadToDrive(filePath, fileName);
 
-    const driveLink = await uploadToDrive(filePath, fileName);
+        res.json({
+          success: true,
+          pdf_url: link
+        });
 
-    console.log("✅ Upload Drive OK");
+      } catch (err) {
+        console.error("❌ Upload Drive erreur:", err);
 
-    res.json({
-      success: true,
-      pdf_url: driveLink
+        res.status(500).json({
+          success: false,
+          error: err.message
+        });
+      }
     });
 
-  } catch (error) {
-    console.error("❌ ERREUR:", error);
+  } catch (err) {
+    console.error("❌ Erreur serveur:", err);
 
     res.status(500).json({
       success: false,
-      error: error.message
+      error: "Erreur serveur"
     });
   }
 });
