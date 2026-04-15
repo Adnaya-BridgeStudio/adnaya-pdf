@@ -1,6 +1,6 @@
 const express = require('express');
 const fs = require('fs');
-const chromium = require('chrome-aws-lambda');
+const puppeteer = require('puppeteer');
 const { google } = require('googleapis');
 
 const app = express();
@@ -18,7 +18,6 @@ const oauth2Client = new google.auth.OAuth2(
   process.env.GOOGLE_REDIRECT_URI
 );
 
-// Charger token si existe
 if (fs.existsSync(TOKEN_PATH)) {
   const tokens = JSON.parse(fs.readFileSync(TOKEN_PATH));
   oauth2Client.setCredentials(tokens);
@@ -26,7 +25,7 @@ if (fs.existsSync(TOKEN_PATH)) {
 }
 
 // ======================
-// 🔗 AUTH ROUTES
+// 🔗 AUTH
 // ======================
 
 app.get('/auth', (req, res) => {
@@ -34,30 +33,22 @@ app.get('/auth', (req, res) => {
     access_type: 'offline',
     scope: ['https://www.googleapis.com/auth/drive.file']
   });
-
   res.redirect(url);
 });
 
 app.get('/auth/callback', async (req, res) => {
-  try {
-    const { code } = req.query;
+  const { code } = req.query;
 
-    const { tokens } = await oauth2Client.getToken(code);
-    oauth2Client.setCredentials(tokens);
+  const { tokens } = await oauth2Client.getToken(code);
+  oauth2Client.setCredentials(tokens);
 
-    fs.writeFileSync(TOKEN_PATH, JSON.stringify(tokens));
+  fs.writeFileSync(TOKEN_PATH, JSON.stringify(tokens));
 
-    console.log("✅ CONNECTÉ À GOOGLE DRIVE");
-
-    res.send("Google Drive connecté ✅");
-  } catch (error) {
-    console.error("❌ OAuth erreur:", error);
-    res.send("Erreur OAuth");
-  }
+  res.send("Google Drive connecté ✅");
 });
 
 // ======================
-// 🎨 TEMPLATE HTML PREMIUM
+// 🎨 HTML
 // ======================
 
 function generateHTML(content) {
@@ -65,44 +56,33 @@ function generateHTML(content) {
   <html>
   <head>
     <style>
-      body { font-family: Arial; padding: 40px; color: #222; }
-      h1 { color: #0A66C2; font-size: 28px; border-bottom: 2px solid #eee; }
-      p { font-size: 14px; line-height: 1.8; }
-      .cover { text-align: center; margin-bottom: 60px; }
-      .cover h1 { font-size: 42px; border: none; }
-      .section { margin-top: 30px; }
+      body { font-family: Arial; padding: 40px; }
+      h1 { color: #0A66C2; }
+      p { line-height: 1.8; }
     </style>
   </head>
   <body>
-    <div class="cover">
-      <h1>ADNAYA MEDIA</h1>
-      <p>Document professionnel 🚀</p>
-    </div>
-    <div class="section">
-      <h1>Contenu</h1>
-      <p>${content}</p>
-    </div>
+    <h1>ADNAYA MEDIA</h1>
+    <p>${content}</p>
   </body>
   </html>
   `;
 }
 
 // ======================
-// 📄 PDF PREMIUM (FIX CHROME CLOUD)
+// 📄 PDF FIX FINAL
 // ======================
 
 async function createPDF(text, filePath) {
-  const browser = await chromium.puppeteer.launch({
-    args: chromium.args,
-    executablePath: await chromium.executablePath,
-    headless: true
+  const browser = await puppeteer.launch({
+    headless: "new",
+    executablePath: process.env.PUPPETEER_EXECUTABLE_PATH,
+    args: ['--no-sandbox', '--disable-setuid-sandbox']
   });
 
   const page = await browser.newPage();
 
-  await page.setContent(generateHTML(text), {
-    waitUntil: 'networkidle0'
-  });
+  await page.setContent(generateHTML(text));
 
   await page.pdf({
     path: filePath,
@@ -114,7 +94,7 @@ async function createPDF(text, filePath) {
 }
 
 // ======================
-// 📤 UPLOAD DRIVE (DOSSIER FIXE)
+// 📤 DRIVE
 // ======================
 
 async function uploadToDrive(filePath, fileName) {
@@ -156,10 +136,6 @@ app.get('/', (req, res) => {
   res.send("✅ ADNAYA SERVER IS RUNNING");
 });
 
-// ======================
-// 🚀 API PRINCIPALE
-// ======================
-
 app.post('/generate-pdf', async (req, res) => {
   try {
     const { text } = req.body;
@@ -167,15 +143,9 @@ app.post('/generate-pdf', async (req, res) => {
     const fileName = `file_${Date.now()}.pdf`;
     const filePath = `/tmp/${fileName}`;
 
-    console.log("📄 Génération PDF...");
-
     await createPDF(text, filePath);
 
-    console.log("✅ PDF créé");
-
     const link = await uploadToDrive(filePath, fileName);
-
-    console.log("✅ Upload Drive OK");
 
     res.json({
       success: true,
@@ -183,7 +153,7 @@ app.post('/generate-pdf', async (req, res) => {
     });
 
   } catch (error) {
-    console.error("❌ ERREUR:", error);
+    console.error(error);
 
     res.status(500).json({
       success: false,
