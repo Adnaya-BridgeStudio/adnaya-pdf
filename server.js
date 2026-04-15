@@ -7,9 +7,9 @@ const app = express();
 app.use(express.json());
 
 // 🔍 DEBUG ENV
-console.log("🔍 GOOGLE_CREDENTIALS RAW:", process.env.GOOGLE_CREDENTIALS ? "EXISTE ✅" : "MANQUANT ❌");
+console.log("🔍 GOOGLE_CREDENTIALS:", process.env.GOOGLE_CREDENTIALS ? "EXISTE ✅" : "MANQUANT ❌");
 
-// 🔐 Google Auth sécurisé + debug
+// 🔐 Parse credentials
 let credentials;
 
 try {
@@ -19,6 +19,7 @@ try {
   console.error("❌ ERREUR PARSE JSON:", err);
 }
 
+// 🔐 Google Auth
 const auth = new google.auth.GoogleAuth({
   credentials,
   scopes: ["https://www.googleapis.com/auth/drive.file"]
@@ -26,15 +27,17 @@ const auth = new google.auth.GoogleAuth({
 
 const drive = google.drive({ version: "v3", auth });
 
-// 📤 Upload Drive avec logs détaillés
+// 📤 Upload vers Google Drive (VERSION FIXÉE)
 async function uploadToDrive(filePath, fileName) {
   try {
     console.log("📤 Upload en cours vers Drive...");
 
     const response = await drive.files.create({
+      supportsAllDrives: true,
+      includeItemsFromAllDrives: true,
       requestBody: {
         name: fileName,
-        parents: ["1CtSfuBQCGqF7fgNFRSRlYUt7RLK8Aey8"],
+        parents: ["1CtSfuBQCGqF7fgNFRSRlYUt7RLK8Aey8"], // ✅ ton dossier partagé
         mimeType: "application/pdf"
       },
       media: {
@@ -47,6 +50,7 @@ async function uploadToDrive(filePath, fileName) {
 
     const fileId = response.data.id;
 
+    // 🔓 rendre public
     await drive.permissions.create({
       fileId,
       requestBody: {
@@ -65,7 +69,7 @@ async function uploadToDrive(filePath, fileName) {
   }
 }
 
-// 🟢 Test serveur
+// 🟢 Route test
 app.get('/', (req, res) => {
   res.send("✅ ADNAYA SERVER IS RUNNING");
 });
