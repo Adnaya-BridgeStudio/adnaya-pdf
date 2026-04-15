@@ -18,10 +18,11 @@ const drive = google.drive({ version: "v3", auth });
 async function uploadToDrive(filePath, fileName) {
   try {
     const response = await drive.files.create({
-      requestBody: {
-        name: fileName,
-        mimeType: "application/pdf"
-      },
+     requestBody: {
+  name: fileName,
+  parents: ["1CtSfuBQCGqF7fgNFRSRlYUt7RLK8Aey8"],
+  mimeType: "application/pdf"
+},
       media: {
         mimeType: "application/pdf",
         body: fs.createReadStream(filePath)
