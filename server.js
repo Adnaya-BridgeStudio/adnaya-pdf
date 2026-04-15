@@ -6,7 +6,7 @@ const { google } = require('googleapis');
 const app = express();
 app.use(express.json());
 
-// 🔐 Google Auth sécurisé
+// 🔐 Google Auth
 const auth = new google.auth.GoogleAuth({
   credentials: JSON.parse(process.env.GOOGLE_CREDENTIALS),
   scopes: ["https://www.googleapis.com/auth/drive.file"]
@@ -14,15 +14,15 @@ const auth = new google.auth.GoogleAuth({
 
 const drive = google.drive({ version: "v3", auth });
 
-// 📤 Upload Drive sécurisé
+// 📤 Upload vers Drive
 async function uploadToDrive(filePath, fileName) {
   try {
     const response = await drive.files.create({
-     requestBody: {
-  name: fileName,
-  parents: ["1CtSfuBQCGqF7fgNFRSRlYUt7RLK8Aey8"],
-  mimeType: "application/pdf"
-},
+      requestBody: {
+        name: fileName,
+        parents: ["1CtSfuBQCGqF7fgNFRSRlYUt7RLK8Aey8"], // ton dossier
+        mimeType: "application/pdf"
+      },
       media: {
         mimeType: "application/pdf",
         body: fs.createReadStream(filePath)
@@ -31,7 +31,6 @@ async function uploadToDrive(filePath, fileName) {
 
     const fileId = response.data.id;
 
-    // rendre public
     await drive.permissions.create({
       fileId,
       requestBody: {
@@ -43,7 +42,7 @@ async function uploadToDrive(filePath, fileName) {
     return `https://drive.google.com/file/d/${fileId}/view`;
 
   } catch (error) {
-    console.error("❌ ERREUR DRIVE:", error.message);
+    console.error("❌ ERREUR DRIVE:", error);
     throw new Error("Upload Drive échoué");
   }
 }
@@ -53,7 +52,7 @@ app.get('/', (req, res) => {
   res.send("✅ ADNAYA SERVER IS RUNNING");
 });
 
-// 📄 Endpoint principal
+// 📄 Génération PDF + upload Drive
 app.post('/generate-pdf', async (req, res) => {
   try {
     const { text } = req.body;
@@ -83,7 +82,6 @@ app.post('/generate-pdf', async (req, res) => {
           success: true,
           pdf_url: driveLink
         });
-
       } catch (err) {
         res.status(500).json({
           success: false,
@@ -93,7 +91,6 @@ app.post('/generate-pdf', async (req, res) => {
     });
 
     stream.on('error', (err) => {
-      console.error("Stream error:", err);
       res.status(500).json({
         success: false,
         error: "Erreur génération PDF"
@@ -101,7 +98,6 @@ app.post('/generate-pdf', async (req, res) => {
     });
 
   } catch (error) {
-    console.error("Erreur serveur:", error);
     res.status(500).json({
       success: false,
       error: "Erreur serveur"
