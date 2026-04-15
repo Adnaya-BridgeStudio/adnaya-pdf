@@ -6,21 +6,35 @@ const { google } = require('googleapis');
 const app = express();
 app.use(express.json());
 
-// 🔐 Google Auth
+// 🔍 DEBUG ENV
+console.log("🔍 GOOGLE_CREDENTIALS RAW:", process.env.GOOGLE_CREDENTIALS ? "EXISTE ✅" : "MANQUANT ❌");
+
+// 🔐 Google Auth sécurisé + debug
+let credentials;
+
+try {
+  credentials = JSON.parse(process.env.GOOGLE_CREDENTIALS || "{}");
+  console.log("✅ JSON PARSÉ OK");
+} catch (err) {
+  console.error("❌ ERREUR PARSE JSON:", err);
+}
+
 const auth = new google.auth.GoogleAuth({
-  credentials: JSON.parse(process.env.GOOGLE_CREDENTIALS),
+  credentials,
   scopes: ["https://www.googleapis.com/auth/drive.file"]
 });
 
 const drive = google.drive({ version: "v3", auth });
 
-// 📤 Upload vers Drive
+// 📤 Upload Drive avec logs détaillés
 async function uploadToDrive(filePath, fileName) {
   try {
+    console.log("📤 Upload en cours vers Drive...");
+
     const response = await drive.files.create({
       requestBody: {
         name: fileName,
-        parents: ["1CtSfuBQCGqF7fgNFRSRlYUt7RLK8Aey8"], // ton dossier
+        parents: ["1CtSfuBQCGqF7fgNFRSRlYUt7RLK8Aey8"],
         mimeType: "application/pdf"
       },
       media: {
@@ -28,6 +42,8 @@ async function uploadToDrive(filePath, fileName) {
         body: fs.createReadStream(filePath)
       }
     });
+
+    console.log("✅ Upload réussi:", response.data);
 
     const fileId = response.data.id;
 
@@ -39,10 +55,12 @@ async function uploadToDrive(filePath, fileName) {
       }
     });
 
+    console.log("🔓 Permission publique activée");
+
     return `https://drive.google.com/file/d/${fileId}/view`;
 
   } catch (error) {
-    console.error("❌ ERREUR DRIVE:", error);
+    console.error("❌ ERREUR DRIVE COMPLETE:", error);
     throw new Error("Upload Drive échoué");
   }
 }
@@ -52,7 +70,7 @@ app.get('/', (req, res) => {
   res.send("✅ ADNAYA SERVER IS RUNNING");
 });
 
-// 📄 Génération PDF + upload Drive
+// 📄 Endpoint principal
 app.post('/generate-pdf', async (req, res) => {
   try {
     const { text } = req.body;
@@ -67,6 +85,8 @@ app.post('/generate-pdf', async (req, res) => {
     const fileName = `file_${Date.now()}.pdf`;
     const filePath = `/tmp/${fileName}`;
 
+    console.log("📄 Génération PDF...");
+
     const doc = new PDFDocument();
     const stream = fs.createWriteStream(filePath);
 
@@ -75,6 +95,8 @@ app.post('/generate-pdf', async (req, res) => {
     doc.end();
 
     stream.on('finish', async () => {
+      console.log("✅ PDF généré:", fileName);
+
       try {
         const driveLink = await uploadToDrive(filePath, fileName);
 
@@ -82,7 +104,10 @@ app.post('/generate-pdf', async (req, res) => {
           success: true,
           pdf_url: driveLink
         });
+
       } catch (err) {
+        console.error("❌ Upload échoué:", err.message);
+
         res.status(500).json({
           success: false,
           error: err.message
@@ -91,6 +116,8 @@ app.post('/generate-pdf', async (req, res) => {
     });
 
     stream.on('error', (err) => {
+      console.error("❌ Erreur stream:", err);
+
       res.status(500).json({
         success: false,
         error: "Erreur génération PDF"
@@ -98,6 +125,8 @@ app.post('/generate-pdf', async (req, res) => {
     });
 
   } catch (error) {
+    console.error("❌ Erreur serveur globale:", error);
+
     res.status(500).json({
       success: false,
       error: "Erreur serveur"
