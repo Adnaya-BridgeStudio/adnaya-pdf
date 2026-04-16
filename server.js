@@ -25,7 +25,7 @@ if (fs.existsSync(TOKEN_PATH)) {
   console.log("✅ Token chargé");
 }
 
-// 🔗 Auth
+// 🔗 Auth Google
 app.get('/auth', (req, res) => {
   const url = oauth2Client.generateAuthUrl({
     access_type: 'offline',
@@ -43,11 +43,18 @@ app.get('/auth/callback', async (req, res) => {
 
   fs.writeFileSync(TOKEN_PATH, JSON.stringify(tokens));
 
+  console.log("✅ CONNECTÉ À GOOGLE DRIVE");
+
   res.send("Google Drive connecté ✅");
 });
 
-// 📤 Upload Drive
+// 📤 Upload Drive sécurisé
 async function uploadToDrive(filePath, fileName, mimeType) {
+
+  if (!oauth2Client.credentials || !oauth2Client.credentials.access_token) {
+    throw new Error("Google Drive non authentifié. Va sur /auth");
+  }
+
   const drive = google.drive({ version: 'v3', auth: oauth2Client });
 
   const response = await drive.files.create({
@@ -114,7 +121,7 @@ app.post('/generate-pdf', async (req, res) => {
 
 
 // =======================
-// 🖼️ UPLOAD MULTI FORMAT
+// 🖼️ MULTI-FILE UPLOAD
 // =======================
 app.post('/upload-image', upload.single('image'), async (req, res) => {
   try {
