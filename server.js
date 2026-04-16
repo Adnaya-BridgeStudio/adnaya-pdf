@@ -1,10 +1,13 @@
 const express = require('express');
 const PDFDocument = require('pdfkit');
 const fs = require('fs');
+const multer = require('multer');
 const { google } = require('googleapis');
 
 const app = express();
 app.use(express.json());
+
+const upload = multer({ dest: '/tmp/' });
 
 const TOKEN_PATH = '/tmp/token.json';
 
@@ -15,20 +18,19 @@ const oauth2Client = new google.auth.OAuth2(
   process.env.GOOGLE_REDIRECT_URI
 );
 
-// 🔁 Charger token si existe
+// 🔁 Charger token
 if (fs.existsSync(TOKEN_PATH)) {
   const tokens = JSON.parse(fs.readFileSync(TOKEN_PATH));
   oauth2Client.setCredentials(tokens);
   console.log("✅ Token chargé");
 }
 
-// 🔗 Login Google
+// 🔗 Auth Google
 app.get('/auth', (req, res) => {
   const url = oauth2Client.generateAuthUrl({
     access_type: 'offline',
     scope: ['https://www.googleapis.com/auth/drive.file']
   });
-
   res.redirect(url);
 });
 
@@ -41,23 +43,21 @@ app.get('/auth/callback', async (req, res) => {
 
   fs.writeFileSync(TOKEN_PATH, JSON.stringify(tokens));
 
-  console.log("✅ CONNECTÉ À GOOGLE DRIVE");
-
   res.send("Google Drive connecté ✅");
 });
 
-// 📤 Upload Drive (DOSSIER FIXE 🔥)
-async function uploadToDrive(filePath, fileName) {
+// 📤 Upload générique (PDF ou IMAGE)
+async function uploadToDrive(filePath, fileName, mimeType) {
   const drive = google.drive({ version: 'v3', auth: oauth2Client });
 
   const response = await drive.files.create({
     requestBody: {
       name: fileName,
-      parents: ["1CtSfuBQCGqF7fgNFRSRlYUt7RLK8Aey8"], // ✅ TON DOSSIER
-      mimeType: 'application/pdf'
+      parents: ["1CtSfuBQCGqF7fgNFRSRlYUt7RLK8Aey8"],
+      mimeType: mimeType
     },
     media: {
-      mimeType: 'application/pdf',
+      mimeType: mimeType,
       body: fs.createReadStream(filePath)
     }
   });
@@ -75,12 +75,15 @@ async function uploadToDrive(filePath, fileName) {
   return `https://drive.google.com/file/d/${fileId}/view`;
 }
 
-// 🟢 Test
+// 🟢 TEST
 app.get('/', (req, res) => {
   res.send("✅ ADNAYA SERVER IS RUNNING");
 });
 
-// 📄 Génération PDF + upload
+
+// =========================
+// 📄 PDF
+// =========================
 app.post('/generate-pdf', async (req, res) => {
   try {
     const { text } = req.body;
@@ -96,33 +99,56 @@ app.post('/generate-pdf', async (req, res) => {
     doc.end();
 
     stream.on('finish', async () => {
-      try {
-        const link = await uploadToDrive(filePath, fileName);
+      const link = await uploadToDrive(filePath, fileName, 'application/pdf');
 
-        res.json({
-          success: true,
-          pdf_url: link
-        });
-
-      } catch (err) {
-        console.error("❌ Upload Drive erreur:", err);
-
-        res.status(500).json({
-          success: false,
-          error: err.message
-        });
-      }
+      res.json({
+        success: true,
+        pdf_url: link
+      });
     });
 
   } catch (err) {
-    console.error("❌ Erreur serveur:", err);
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
 
+
+// =========================
+// 🖼️ IMAGE (NOUVEAU 🔥)
+// =========================
+app.post('/upload-image', upload.single('image'), async (req, res) => {
+  try {
+    const file = req.file;
+
+    if (!file) {
+      return res.status(400).json({
+        success: false,
+        error: "Aucun fichier"
+      });
+    }
+
+    const fileName = `image_${Date.now()}_${file.originalname}`;
+
+    const link = await uploadToDrive(
+      file.path,
+      fileName,
+      file.mimetype
+    );
+
+    res.json({
+      success: true,
+      image_url: link
+    });
+
+  } catch (err) {
+    console.error(err);
     res.status(500).json({
       success: false,
-      error: "Erreur serveur"
+      error: err.message
     });
   }
 });
+
 
 const PORT = process.env.PORT || 10000;
 
