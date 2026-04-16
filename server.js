@@ -2,9 +2,14 @@ const express = require('express');
 const PDFDocument = require('pdfkit');
 const fs = require('fs');
 const multer = require('multer');
+const cors = require('cors');
 const { google } = require('googleapis');
 
 const app = express();
+
+// ✅ CORS (corrige ton erreur actuelle)
+app.use(cors());
+
 app.use(express.json());
 
 const upload = multer({ dest: '/tmp/' });
@@ -76,7 +81,7 @@ async function uploadToDrive(filePath, fileName, mimeType) {
   return `https://drive.google.com/file/d/${fileId}/view`;
 }
 
-// 🟢 Test
+// 🟢 TEST
 app.get('/', (req, res) => {
   res.send("✅ ADNAYA SERVER IS RUNNING");
 });
@@ -119,7 +124,7 @@ app.post('/generate-pdf', async (req, res) => {
 
 
 // =======================
-// 🖼️ UPLOAD MULTI FORMAT (STABLE)
+// 🖼️ UPLOAD MULTI-FORMAT
 // =======================
 app.post('/upload-image', upload.single('image'), async (req, res) => {
   console.log("📥 Upload reçu");
@@ -127,7 +132,10 @@ app.post('/upload-image', upload.single('image'), async (req, res) => {
   const file = req.file;
 
   if (!file) {
-    return res.json({ success: false, error: "Aucun fichier" });
+    return res.json({
+      success: false,
+      error: "Aucun fichier"
+    });
   }
 
   try {
