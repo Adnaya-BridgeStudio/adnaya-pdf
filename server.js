@@ -3,10 +3,6 @@ const PDFDocument = require('pdfkit');
 const fs = require('fs');
 const { google } = require('googleapis');
 
-/* 🔥 AJOUT (sans toucher au reste) */
-const multer = require('multer');
-const upload = multer({ dest: '/tmp/' });
-
 const app = express();
 app.use(express.json());
 
@@ -57,7 +53,7 @@ async function uploadToDrive(filePath, fileName) {
   const response = await drive.files.create({
     requestBody: {
       name: fileName,
-      parents: ["1CtSfuBQCGqF7fgNFRSRlYUt7RLK8Aey8"],
+      parents: ["1CtSfuBQCGqF7fgNFRSRlYUt7RLK8Aey8"], // ✅ TON DOSSIER
       mimeType: 'application/pdf'
     },
     media: {
@@ -84,9 +80,7 @@ app.get('/', (req, res) => {
   res.send("✅ ADNAYA SERVER IS RUNNING");
 });
 
-// =======================
 // 📄 Génération PDF + upload
-// =======================
 app.post('/generate-pdf', async (req, res) => {
   try {
     const { text } = req.body;
@@ -129,62 +123,6 @@ app.post('/generate-pdf', async (req, res) => {
     });
   }
 });
-
-
-// =======================
-// 🔥 AJOUT UNIQUEMENT : REQUETE CLIENT
-// =======================
-app.post('/submit-request', upload.single('file'), async (req, res) => {
-  try {
-    const { text, contact } = req.body;
-    const file = req.file;
-
-    if (!text || !contact) {
-      return res.json({
-        success: false,
-        error: "Texte ou contact manquant"
-      });
-    }
-
-    const date = new Date().toISOString().split('T')[0];
-
-    const content = `
-===== ADNAYA CLIENT REQUEST =====
-
-Date: ${date}
-Contact: ${contact}
-
-Demande:
-${text}
-`;
-
-    const fileNameTxt = `REQUEST_${date}_${Date.now()}.txt`;
-    const filePathTxt = `/tmp/${fileNameTxt}`;
-
-    fs.writeFileSync(filePathTxt, content);
-
-    // ⚠️ utilise TA fonction existante (inchangée)
-    await uploadToDrive(filePathTxt, fileNameTxt);
-
-    if (file) {
-      const fileName = `FILE_${date}_${file.originalname}`;
-      await uploadToDrive(file.path, fileName);
-    }
-
-    return res.json({
-      success: true
-    });
-
-  } catch (err) {
-    console.error("❌ ERREUR REQUETE:", err);
-
-    return res.json({
-      success: false,
-      error: err.message
-    });
-  }
-});
-
 
 const PORT = process.env.PORT || 10000;
 
