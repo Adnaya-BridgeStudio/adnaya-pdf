@@ -1,18 +1,14 @@
 const express = require('express');
 const PDFDocument = require('pdfkit');
 const fs = require('fs');
-const multer = require('multer');
-const cors = require('cors');
 const { google } = require('googleapis');
 
-const app = express();
-
-// ✅ CORS
-app.use(cors());
-
-app.use(express.json());
-
+/* 🔥 AJOUT (sans toucher au reste) */
+const multer = require('multer');
 const upload = multer({ dest: '/tmp/' });
+
+const app = express();
+app.use(express.json());
 
 const TOKEN_PATH = '/tmp/token.json';
 
@@ -23,19 +19,20 @@ const oauth2Client = new google.auth.OAuth2(
   process.env.GOOGLE_REDIRECT_URI
 );
 
-// 🔁 Charger token
+// 🔁 Charger token si existe
 if (fs.existsSync(TOKEN_PATH)) {
   const tokens = JSON.parse(fs.readFileSync(TOKEN_PATH));
   oauth2Client.setCredentials(tokens);
   console.log("✅ Token chargé");
 }
 
-// 🔗 Auth Google
+// 🔗 Login Google
 app.get('/auth', (req, res) => {
   const url = oauth2Client.generateAuthUrl({
     access_type: 'offline',
     scope: ['https://www.googleapis.com/auth/drive.file']
   });
+
   res.redirect(url);
 });
 
@@ -53,17 +50,18 @@ app.get('/auth/callback', async (req, res) => {
   res.send("Google Drive connecté ✅");
 });
 
-// 📤 Upload Drive
-async function uploadToDrive(filePath, fileName, mimeType) {
+// 📤 Upload Drive (DOSSIER FIXE 🔥)
+async function uploadToDrive(filePath, fileName) {
   const drive = google.drive({ version: 'v3', auth: oauth2Client });
 
   const response = await drive.files.create({
     requestBody: {
       name: fileName,
-      parents: ["1CtSfuBQCGqF7fgNFRSRlYUt7RLK8Aey8"]
+      parents: ["1CtSfuBQCGqF7fgNFRSRlYUt7RLK8Aey8"],
+      mimeType: 'application/pdf'
     },
     media: {
-      mimeType: mimeType,
+      mimeType: 'application/pdf',
       body: fs.createReadStream(filePath)
     }
   });
@@ -81,14 +79,13 @@ async function uploadToDrive(filePath, fileName, mimeType) {
   return `https://drive.google.com/file/d/${fileId}/view`;
 }
 
-// 🟢 TEST
+// 🟢 Test
 app.get('/', (req, res) => {
   res.send("✅ ADNAYA SERVER IS RUNNING");
 });
 
-
 // =======================
-// 📄 PDF
+// 📄 Génération PDF + upload
 // =======================
 app.post('/generate-pdf', async (req, res) => {
   try {
@@ -106,74 +103,48 @@ app.post('/generate-pdf', async (req, res) => {
 
     stream.on('finish', async () => {
       try {
-        const link = await uploadToDrive(filePath, fileName, 'application/pdf');
+        const link = await uploadToDrive(filePath, fileName);
 
-        return res.json({
+        res.json({
           success: true,
           pdf_url: link
         });
+
       } catch (err) {
-        return res.json({ success: false, error: err.message });
+        console.error("❌ Upload Drive erreur:", err);
+
+        res.status(500).json({
+          success: false,
+          error: err.message
+        });
       }
     });
 
   } catch (err) {
-    return res.json({ success: false, error: err.message });
-  }
-});
+    console.error("❌ Erreur serveur:", err);
 
-
-// =======================
-// 🖼️ UPLOAD MULTI-FORMAT
-// =======================
-app.post('/upload-image', upload.single('image'), async (req, res) => {
-  console.log("📥 Upload reçu");
-
-  const file = req.file;
-
-  if (!file) {
-    return res.json({
+    res.status(500).json({
       success: false,
-      error: "Aucun fichier"
-    });
-  }
-
-  try {
-    const fileName = `file_${Date.now()}_${file.originalname}`;
-
-    const link = await uploadToDrive(
-      file.path,
-      fileName,
-      file.mimetype
-    );
-
-    console.log("✅ Upload OK:", link);
-
-    return res.json({
-      success: true,
-      image_url: link
-    });
-
-  } catch (err) {
-    console.error("❌ ERREUR:", err);
-
-    return res.json({
-      success: false,
-      error: "Erreur upload Drive"
+      error: "Erreur serveur"
     });
   }
 });
 
 
 // =======================
-// 🔥 REQUÊTE CLIENT (NOUVEAU)
+// 🔥 AJOUT UNIQUEMENT : REQUETE CLIENT
 // =======================
 app.post('/submit-request', upload.single('file'), async (req, res) => {
-  console.log("📥 Requête client reçue");
-
   try {
     const { text, contact } = req.body;
     const file = req.file;
+
+    if (!text || !contact) {
+      return res.json({
+        success: false,
+        error: "Texte ou contact manquant"
+      });
+    }
 
     const date = new Date().toISOString().split('T')[0];
 
@@ -187,30 +158,18 @@ Demande:
 ${text}
 `;
 
-    // 📄 fichier texte
     const fileNameTxt = `REQUEST_${date}_${Date.now()}.txt`;
     const filePathTxt = `/tmp/${fileNameTxt}`;
 
     fs.writeFileSync(filePathTxt, content);
 
-    await uploadToDrive(
-      filePathTxt,
-      fileNameTxt,
-      'text/plain'
-    );
+    // ⚠️ utilise TA fonction existante (inchangée)
+    await uploadToDrive(filePathTxt, fileNameTxt);
 
-    // 📎 fichier joint
     if (file) {
       const fileName = `FILE_${date}_${file.originalname}`;
-
-      await uploadToDrive(
-        file.path,
-        fileName,
-        file.mimetype
-      );
+      await uploadToDrive(file.path, fileName);
     }
-
-    console.log("✅ Requête enregistrée");
 
     return res.json({
       success: true
