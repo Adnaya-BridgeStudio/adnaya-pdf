@@ -7,7 +7,14 @@ const { google } = require('googleapis');
 const multer = require('multer');
 const upload = multer({ dest: '/tmp/' });
 
+/* 🔥 AJOUT CORS (UNIQUEMENT) */
+const cors = require('cors');
+
 const app = express();
+
+/* 🔥 AJOUT CORS (UNIQUEMENT) */
+app.use(cors());
+
 app.use(express.json());
 
 const TOKEN_PATH = '/tmp/token.json';
@@ -163,7 +170,6 @@ ${text}
 
     fs.writeFileSync(filePathTxt, content);
 
-    // ⚠️ utilise TA fonction existante (inchangée)
     await uploadToDrive(filePathTxt, fileNameTxt);
 
     if (file) {
