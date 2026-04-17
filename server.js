@@ -7,7 +7,7 @@ const { google } = require('googleapis');
 
 const app = express();
 
-// ✅ CORS (corrige ton erreur actuelle)
+// ✅ CORS
 app.use(cors());
 
 app.use(express.json());
@@ -163,6 +163,69 @@ app.post('/upload-image', upload.single('image'), async (req, res) => {
     });
   }
 });
+
+
+// =======================
+// 🔥 REQUÊTE CLIENT (NOUVEAU)
+// =======================
+app.post('/submit-request', upload.single('file'), async (req, res) => {
+  console.log("📥 Requête client reçue");
+
+  try {
+    const { text, contact } = req.body;
+    const file = req.file;
+
+    const date = new Date().toISOString().split('T')[0];
+
+    const content = `
+===== ADNAYA CLIENT REQUEST =====
+
+Date: ${date}
+Contact: ${contact}
+
+Demande:
+${text}
+`;
+
+    // 📄 fichier texte
+    const fileNameTxt = `REQUEST_${date}_${Date.now()}.txt`;
+    const filePathTxt = `/tmp/${fileNameTxt}`;
+
+    fs.writeFileSync(filePathTxt, content);
+
+    await uploadToDrive(
+      filePathTxt,
+      fileNameTxt,
+      'text/plain'
+    );
+
+    // 📎 fichier joint
+    if (file) {
+      const fileName = `FILE_${date}_${file.originalname}`;
+
+      await uploadToDrive(
+        file.path,
+        fileName,
+        file.mimetype
+      );
+    }
+
+    console.log("✅ Requête enregistrée");
+
+    return res.json({
+      success: true
+    });
+
+  } catch (err) {
+    console.error("❌ ERREUR REQUETE:", err);
+
+    return res.json({
+      success: false,
+      error: err.message
+    });
+  }
+});
+
 
 const PORT = process.env.PORT || 10000;
 
