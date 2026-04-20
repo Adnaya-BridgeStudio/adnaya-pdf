@@ -3,197 +3,309 @@ const PDFDocument = require('pdfkit');
 const fs = require('fs');
 const { google } = require('googleapis');
 
-/* 🔥 AJOUT (sans toucher au reste) */
 const multer = require('multer');
 const upload = multer({ dest: '/tmp/' });
 
-/* 🔥 AJOUT CORS (UNIQUEMENT) */
 const cors = require('cors');
 
 const app = express();
 
-/* 🔥 AJOUT CORS (UNIQUEMENT) */
 app.use(cors());
-
 app.use(express.json());
 
 const TOKEN_PATH = '/tmp/token.json';
 
-// 🔐 OAuth2
 const oauth2Client = new google.auth.OAuth2(
-  process.env.GOOGLE_CLIENT_ID,
-  process.env.GOOGLE_CLIENT_SECRET,
-  process.env.GOOGLE_REDIRECT_URI
+ process.env.GOOGLE_CLIENT_ID,
+ process.env.GOOGLE_CLIENT_SECRET,
+ process.env.GOOGLE_REDIRECT_URI
 );
 
-// 🔁 Charger token si existe
+// =======================
+// TOKEN
+// =======================
+
 if (fs.existsSync(TOKEN_PATH)) {
-  const tokens = JSON.parse(fs.readFileSync(TOKEN_PATH));
-  oauth2Client.setCredentials(tokens);
-  console.log("✅ Token chargé");
+ const tokens = JSON.parse(fs.readFileSync(TOKEN_PATH));
+ oauth2Client.setCredentials(tokens);
+ console.log("✅ Token chargé");
 }
 
-// 🔗 Login Google
-app.get('/auth', (req, res) => {
-  const url = oauth2Client.generateAuthUrl({
-    access_type: 'offline',
-    scope: ['https://www.googleapis.com/auth/drive.file']
-  });
+// =======================
+// AUTH
+// =======================
 
-  res.redirect(url);
+app.get('/auth', (req,res)=>{
+
+ const url = oauth2Client.generateAuthUrl({
+   access_type:'offline',
+   scope:['https://www.googleapis.com/auth/drive.file']
+ });
+
+ res.redirect(url);
+
 });
 
-// 🔁 Callback
-app.get('/auth/callback', async (req, res) => {
-  const { code } = req.query;
 
-  const { tokens } = await oauth2Client.getToken(code);
-  oauth2Client.setCredentials(tokens);
+app.get('/auth/callback', async(req,res)=>{
 
-  fs.writeFileSync(TOKEN_PATH, JSON.stringify(tokens));
+ const { code } = req.query;
 
-  console.log("✅ CONNECTÉ À GOOGLE DRIVE");
+ const { tokens } = await oauth2Client.getToken(code);
 
-  res.send("Google Drive connecté ✅");
+ oauth2Client.setCredentials(tokens);
+
+ fs.writeFileSync(
+   TOKEN_PATH,
+   JSON.stringify(tokens)
+ );
+
+ console.log("✅ CONNECTÉ À GOOGLE DRIVE");
+
+ res.send("Google Drive connecté ✅");
+
 });
 
-// 📤 Upload Drive (DOSSIER FIXE 🔥)
-async function uploadToDrive(filePath, fileName) {
-  const drive = google.drive({ version: 'v3', auth: oauth2Client });
 
-  const response = await drive.files.create({
-    requestBody: {
-      name: fileName,
-      parents: ["1CtSfuBQCGqF7fgNFRSRlYUt7RLK8Aey8"],
-      mimeType: 'application/pdf'
-    },
-    media: {
-      mimeType: 'application/pdf',
-      body: fs.createReadStream(filePath)
-    }
-  });
+// =======================
+// UPLOAD DRIVE
+// =======================
 
-  const fileId = response.data.id;
+async function uploadToDrive(
+ filePath,
+ fileName,
+ mimeType='application/pdf'
+){
 
-  await drive.permissions.create({
-    fileId,
-    requestBody: {
-      role: 'reader',
-      type: 'anyone'
-    }
-  });
+ const drive = google.drive({
+   version:'v3',
+   auth:oauth2Client
+ });
 
-  return `https://drive.google.com/file/d/${fileId}/view`;
+ const response = await drive.files.create({
+
+   requestBody:{
+      name:fileName,
+      parents:["1CtSfuBQCGqF7fgNFRSRlYUt7RLK8Aey8"]
+   },
+
+   media:{
+      mimeType:mimeType,
+      body:fs.createReadStream(filePath)
+   }
+
+ });
+
+ const fileId = response.data.id;
+
+ await drive.permissions.create({
+   fileId,
+   requestBody:{
+      role:'reader',
+      type:'anyone'
+   }
+ });
+
+ return `https://drive.google.com/file/d/${fileId}/view`;
+
 }
 
-// 🟢 Test
-app.get('/', (req, res) => {
-  res.send("✅ ADNAYA SERVER IS RUNNING");
+
+// =======================
+// TEST
+// =======================
+
+app.get('/',(req,res)=>{
+ res.send("✅ ADNAYA SERVER IS RUNNING");
 });
 
+
 // =======================
-// 📄 Génération PDF + upload
+// PDF
 // =======================
-app.post('/generate-pdf', async (req, res) => {
-  try {
-    const { text } = req.body;
 
-    const fileName = `file_${Date.now()}.pdf`;
-    const filePath = `/tmp/${fileName}`;
+app.post('/generate-pdf', async(req,res)=>{
 
-    const doc = new PDFDocument();
-    const stream = fs.createWriteStream(filePath);
+ try{
 
-    doc.pipe(stream);
-    doc.text(text);
-    doc.end();
+   const { text } = req.body;
 
-    stream.on('finish', async () => {
-      try {
-        const link = await uploadToDrive(filePath, fileName);
+   const fileName=`file_${Date.now()}.pdf`;
 
-        res.json({
-          success: true,
-          pdf_url: link
-        });
+   const filePath=`/tmp/${fileName}`;
 
-      } catch (err) {
-        console.error("❌ Upload Drive erreur:", err);
+   const doc=new PDFDocument();
 
-        res.status(500).json({
-          success: false,
-          error: err.message
-        });
+   const stream=fs.createWriteStream(filePath);
+
+   doc.pipe(stream);
+
+   doc.text(text);
+
+   doc.end();
+
+   stream.on('finish',async()=>{
+
+      try{
+
+       const link=await uploadToDrive(
+         filePath,
+         fileName,
+         'application/pdf'
+       );
+
+       res.json({
+         success:true,
+         pdf_url:link
+       });
+
       }
-    });
 
-  } catch (err) {
-    console.error("❌ Erreur serveur:", err);
+      catch(err){
 
-    res.status(500).json({
-      success: false,
-      error: "Erreur serveur"
-    });
-  }
+       console.error(err);
+
+       res.status(500).json({
+         success:false,
+         error:err.message
+       });
+
+      }
+
+   });
+
+ }
+
+ catch(err){
+
+   res.status(500).json({
+      success:false,
+      error:"Erreur serveur"
+   });
+
+ }
+
 });
 
 
 // =======================
-// 🔥 AJOUT UNIQUEMENT : REQUETE CLIENT
+// REQUETE CLIENT
 // =======================
-app.post('/submit-request', upload.single('file'), async (req, res) => {
-  try {
-    const { text, contact } = req.body;
-    const file = req.file;
 
-    if (!text || !contact) {
+app.post('/submit-request', upload.single('file'), async(req,res)=>{
+
+ try{
+
+   const { text, contact } = req.body;
+
+   const file=req.file;
+
+   if(!text || !contact){
+
       return res.json({
-        success: false,
-        error: "Texte ou contact manquant"
+        success:false,
+        error:"Texte ou contact manquant"
       });
-    }
 
-    const date = new Date().toISOString().split('T')[0];
+   }
 
-    const content = `
-===== ADNAYA CLIENT REQUEST =====
+
+   // 🔥 Nettoyage format texte
+   const cleanText = text
+      .replace(/\r\n/g,"\n")
+      .replace(/\n{3,}/g,"\n\n")
+      .trim();
+
+
+   const date = new Date().toISOString().split('T')[0];
+
+
+   // 🔥 ALIGNEMENT PROPRE
+   const content =
+`===== ADNAYA CLIENT REQUEST =====
 
 Date: ${date}
 Contact: ${contact}
 
-Demande:
-${text}
+-------------------------
+DEMANDE CLIENT
+-------------------------
+
+${cleanText}
+
+-------------------------
+END REQUEST
+-------------------------
 `;
 
-    const fileNameTxt = `REQUEST_${date}_${Date.now()}.txt`;
-    const filePathTxt = `/tmp/${fileNameTxt}`;
 
-    fs.writeFileSync(filePathTxt, content);
+   const fileNameTxt=
+   `REQUEST_${date}_${Date.now()}.txt`;
 
-    await uploadToDrive(filePathTxt, fileNameTxt);
+   const filePathTxt=
+   `/tmp/${fileNameTxt}`;
 
-    if (file) {
-      const fileName = `FILE_${date}_${file.originalname}`;
-      await uploadToDrive(file.path, fileName);
-    }
+   fs.writeFileSync(
+     filePathTxt,
+     content,
+     'utf8'
+   );
 
-    return res.json({
-      success: true
-    });
 
-  } catch (err) {
-    console.error("❌ ERREUR REQUETE:", err);
+   // 🔥 upload txt propre
+   await uploadToDrive(
+      filePathTxt,
+      fileNameTxt,
+      'text/plain'
+   );
 
-    return res.json({
-      success: false,
-      error: err.message
-    });
-  }
+
+   if(file){
+
+      const fileName=
+      `FILE_${date}_${file.originalname}`;
+
+      await uploadToDrive(
+         file.path,
+         fileName,
+         file.mimetype
+      );
+
+   }
+
+
+   return res.json({
+      success:true
+   });
+
+
+ }
+
+ catch(err){
+
+   console.error(
+    "❌ ERREUR REQUETE:",
+    err
+   );
+
+   return res.json({
+     success:false,
+     error:err.message
+   });
+
+ }
+
 });
 
 
-const PORT = process.env.PORT || 10000;
 
-app.listen(PORT, () => {
-  console.log(`🚀 Server running on port ${PORT}`);
+const PORT=
+process.env.PORT || 10000;
+
+app.listen(PORT,()=>{
+
+ console.log(
+ `🚀 Server running on port ${PORT}`
+ );
+
 });
