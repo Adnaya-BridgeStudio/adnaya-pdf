@@ -17,11 +17,9 @@ const TOKEN_PATH='/tmp/token.json';
 
 const oauth2Client=
 new google.auth.OAuth2(
-
 process.env.GOOGLE_CLIENT_ID,
 process.env.GOOGLE_CLIENT_SECRET,
 process.env.GOOGLE_REDIRECT_URI
-
 );
 
 
@@ -163,7 +161,6 @@ type:'anyone'
 });
 
 
-// 🔥 BUG FIX undefined
 return `https://drive.google.com/file/d/${fileId}/view`;
 
 }
@@ -253,14 +250,45 @@ cleanText.split('\n');
 
 
 // ======================
-// FORMAT ONLY
-// (NO CHANGE OF CONTENT)
+// PAGE SAFETY
+// ======================
+
+function safeBottom(){
+
+if(
+doc.y>710
+){
+
+doc.addPage();
+
+}
+
+}
+
+
+function keepWithNext(){
+
+if(
+doc.y>670
+){
+
+doc.addPage();
+
+}
+
+}
+
+
+
+// ======================
+// FORMAT
 // ======================
 
 paragraphs.forEach(p=>{
 
 const line=
 p.trim();
+
 
 if(!line){
 
@@ -272,7 +300,7 @@ return;
 
 
 
-// LISTES SI EXISTENT
+// LISTES
 
 if(
 
@@ -288,6 +316,8 @@ line.startsWith('• ')
 .test(line)
 
 ){
+
+safeBottom();
 
 doc
 
@@ -313,7 +343,7 @@ align:'left'
 
 );
 
-doc.moveDown(.3);
+doc.moveDown(.35);
 
 return;
 
@@ -322,7 +352,7 @@ return;
 
 
 
-// TITRES LÉGERS
+// TITRES
 
 if(
 
@@ -342,7 +372,9 @@ line.endsWith(':')
 
 ){
 
-doc.moveDown(.6);
+keepWithNext();
+
+doc.moveDown(.7);
 
 doc
 
@@ -352,7 +384,7 @@ doc
 'Helvetica-Bold'
 )
 
-.fontSize(13.5)
+.fontSize(15.5)
 
 .text(
 
@@ -366,7 +398,7 @@ align:'left'
 
 );
 
-doc.moveDown(.4);
+doc.moveDown(.45);
 
 return;
 
@@ -375,7 +407,9 @@ return;
 
 
 
-// PARAGRAPHE NORMAL
+// PARAGRAPHES
+
+safeBottom();
 
 doc
 
@@ -412,6 +446,8 @@ doc.moveDown(.5);
 // ======================
 // SIGNATURE
 // ======================
+
+safeBottom();
 
 doc.moveDown(2);
 
@@ -456,6 +492,7 @@ align:'center'
 
 
 doc.end();
+
 
 
 
@@ -528,6 +565,7 @@ error:'Erreur serveur'
 }
 
 });
+
 
 
 
