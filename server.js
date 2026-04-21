@@ -57,30 +57,51 @@ res.redirect(url);
 
 
 
-app.get(
-'/auth/callback',
-async(req,res)=>{
+app.get('/auth/callback', async(req,res)=>{
 
-const {code}=req.query;
+try{
 
-const {tokens}=
-await oauth2Client.getToken(code);
+ const {code}=req.query;
 
-oauth2Client.setCredentials(tokens);
+ if(!code){
 
-console.log(
-"⚠ Nouveau refresh token si présent:"
-);
+   return res.status(400).send(
+    "Code OAuth manquant"
+   );
 
-console.log(
-tokens.refresh_token
-||
-"Pas de nouveau refresh token retourné"
-);
+ }
 
-res.send(
-"Google Drive connecté ✅\nCopiez le refresh token affiché dans les logs Render si nouveau."
-);
+ const {tokens}=
+ await oauth2Client.getToken(code);
+
+ oauth2Client.setCredentials(tokens);
+
+ console.log(
+ "Refresh token si présent:"
+ );
+
+ console.log(
+ tokens.refresh_token || "Aucun nouveau"
+ );
+
+ return res.send(
+ "Google Drive connecté ✅"
+ );
+
+}
+
+catch(err){
+
+ console.error(
+ "AUTH CALLBACK ERROR:",
+ err.message
+ );
+
+ return res.status(500).send(
+ "Erreur OAuth (mais serveur vivant)"
+ );
+
+}
 
 });
 
