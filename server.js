@@ -552,8 +552,6 @@ new Date()
 
 
 
-// 🔥 NOMMAGE REQUETE
-
 const firstRequestLine=
 
 cleanText
@@ -644,8 +642,6 @@ fileNameTxt,
 
 
 
-// 🔥 NOMMAGE PIECE JOINTE
-
 if(file){
 
 const fileName=
@@ -684,6 +680,88 @@ error:err.message
 
 });
 
+
+
+
+
+// =======================
+// UPLOADER FICHIER
+// =======================
+
+app.post(
+'/upload-image',
+upload.single('image'),
+async(req,res)=>{
+
+try{
+
+const file=req.file;
+
+if(!file){
+
+return res.json({
+
+success:false,
+
+error:'Aucun fichier reçu'
+
+});
+
+}
+
+
+const date=
+new Date()
+.toISOString()
+.split('T')[0];
+
+
+const fileName=
+
+`UPLOAD_${date}_${file.originalname}`;
+
+
+const link=
+await uploadToDrive(
+
+file.path,
+
+fileName,
+
+file.mimetype
+
+);
+
+
+return res.json({
+
+success:true,
+
+image_url:link
+
+});
+
+
+}
+
+catch(err){
+
+console.error(
+'❌ UPLOAD IMAGE:',
+err
+);
+
+return res.json({
+
+success:false,
+
+error:err.message
+
+});
+
+}
+
+});
 
 
 
