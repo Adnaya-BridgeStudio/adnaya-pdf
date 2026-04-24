@@ -26,6 +26,9 @@ refresh_token:
 process.env.GOOGLE_REFRESH_TOKEN
 });
 
+console.log("🔑 TOKEN CHARGÉ:", process.env.GOOGLE_REFRESH_TOKEN);
+
+console.log("CREDENTIALS:", oauth2Client.credentials);
 // =======================
 // TOKEN
 // =======================
