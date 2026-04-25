@@ -220,17 +220,12 @@ app.post('/generate-pdf', async (req, res) => {
 
     let cleanText = normalizeEmojis(text || "")
 
-      // 🔥 fix tableau header collé
       .replace(/(Offre)(Volume)(Prix)(Total)/g, '$1  $2  $3  $4')
-
-      // 🔥 espace entre texte et chiffres
       .replace(/([a-zA-Z])([0-9])/g, '$1  $2')
 
-      // 🔥 bullet → tiret
       .replace(/•/g, '-')
       .replace(/-\s*/g, '- ')
 
-      // 🔥 corrige numérotation
       .replace(/-\s*([0-9]+\.)/g, '$1 ')
       .replace(/([0-9]+\.)\s*/g, '$1 ')
 
@@ -242,6 +237,44 @@ app.post('/generate-pdf', async (req, res) => {
     const paragraphs = cleanText.split('\n');
 
     // =======================
+    // TABLE BUFFER SYSTEM
+    // =======================
+
+    let tableBuffer = [];
+
+    function flushTable() {
+
+      if (!tableBuffer.length) return;
+
+      const startX = 55;
+      const colCount = Math.max(...tableBuffer.map(r => r.length));
+      const colWidth = 480 / colCount;
+
+      let y = doc.y;
+
+      tableBuffer.forEach((row, rowIndex) => {
+
+        row.forEach((cell, i) => {
+
+          doc
+            .font(rowIndex === 0 ? fontBold : fontRegular)
+            .fontSize(10.5)
+            .fillColor('#222222')
+            .text(cell.trim(), startX + i * colWidth, y, {
+              width: colWidth,
+              align: i === 0 ? 'left' : 'right'
+            });
+
+        });
+
+        y += 20;
+      });
+
+      doc.moveDown(1);
+      tableBuffer = [];
+    }
+
+    // =======================
     // RENDER
     // =======================
 
@@ -250,60 +283,37 @@ app.post('/generate-pdf', async (req, res) => {
       const line = p.trim();
 
       if (!line) {
+        flushTable();
         doc.moveDown(0.7);
         return;
       }
 
-      // =======================
-      // TABLE PRO ENGINE
-      // =======================
+      // ===== TABLE ASCII =====
+      if (line.includes('|')) {
 
-      const cols = line.split(/\s{2,}/);
+        const cols = line
+          .split('|')
+          .map(c => c.trim())
+          .filter(c => c);
 
-      if (cols.length >= 3) {
-
-        const isHeader =
-          cols.includes('Offre') &&
-          cols.includes('Volume');
-
-        const startX = 55;
-        const colWidths = [200, 80, 80, 80];
-
-        let x = startX;
-        const y = doc.y;
-
-        cols.forEach((col, i) => {
-
-          doc
-            .font(isHeader ? fontBold : fontRegular)
-            .fontSize(isHeader ? 11.5 : 11)
-            .fillColor(isHeader ? '#000000' : '#222222')
-            .text(col, x, y, {
-              width: colWidths[i] || 80,
-              align: i === 0 ? 'left' : 'right'
-            });
-
-          x += colWidths[i] || 80;
-        });
-
-        if (isHeader) {
-          doc.moveDown(0.3);
-
-          doc
-            .strokeColor('#aaaaaa')
-            .moveTo(startX, doc.y)
-            .lineTo(540, doc.y)
-            .stroke();
+        if (cols.length >= 2) {
+          tableBuffer.push(cols);
+          return;
         }
+      }
 
-        doc.moveDown(0.6);
+      // ===== TABLE SPACED =====
+      const spacedCols = line.split(/\s{2,}/);
+
+      if (spacedCols.length >= 3) {
+        tableBuffer.push(spacedCols);
         return;
       }
 
-      // =======================
-      // LIST
-      // =======================
+      // ===== FLUSH TABLE =====
+      flushTable();
 
+      // ===== LIST =====
       if (
         line.startsWith('- ') ||
         /^[0-9]{1,2}\./.test(line)
@@ -323,10 +333,7 @@ app.post('/generate-pdf', async (req, res) => {
         return;
       }
 
-      // =======================
-      // TITLE
-      // =======================
-
+      // ===== TITLE =====
       if (
         line.length < 65 &&
         (line === line.toUpperCase() || line.endsWith(':'))
@@ -344,10 +351,7 @@ app.post('/generate-pdf', async (req, res) => {
         return;
       }
 
-      // =======================
-      // PARAGRAPH
-      // =======================
-
+      // ===== PARAGRAPH =====
       doc
         .fillColor('#222222')
         .font(fontRegular)
@@ -358,7 +362,11 @@ app.post('/generate-pdf', async (req, res) => {
         });
 
       doc.moveDown(0.5);
+
     });
+
+    // FINAL TABLE FLUSH
+    flushTable();
 
     // =======================
     // SIGNATURE
