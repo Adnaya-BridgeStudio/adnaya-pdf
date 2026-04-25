@@ -139,19 +139,22 @@ app.post('/generate-pdf', async (req, res) => {
     const { text } = req.body;
 
     // =======================
-    // EMOJI NORMALIZER
+    // NORMALIZERS
     // =======================
 
     function normalizeEmojis(input) {
       return input
         .replace(/🎯/g, '▶')
         .replace(/🧬/g, '◆')
-        .replace(/🟢/g, '●')
-        .replace(/🟠/g, '●')
-        .replace(/🟡/g, '●')
-        .replace(/🔴/g, '●')
+        .replace(/🟢|🟠|🟡|🔴/g, '●')
         .replace(/🚀/g, '➤')
         .replace(/⚠️/g, '⚠');
+    }
+
+    function normalizeBullets(input) {
+      return input
+        .replace(/[▪■●◦◉]/g, '•')
+        .replace(/•\s*/g, '• ');
     }
 
     // =======================
@@ -165,22 +168,17 @@ app.post('/generate-pdf', async (req, res) => {
       String(now.getHours()).padStart(2, '0') +
       String(now.getMinutes()).padStart(2, '0');
 
-    const firstLine = (text || '')
-      .split('\n')
-      .find(x => x.trim());
+    const firstLine = (text || '').split('\n').find(x => x.trim());
 
     let slug = 'Document';
 
     if (firstLine) {
-
       slug = firstLine
         .replace(/[^a-zA-Z0-9À-ÿ ]/g, '')
         .trim()
         .split(' ')
         .slice(0, 4)
-        .join('_');
-
-      if (!slug) slug = 'Document';
+        .join('_') || 'Document';
     }
 
     const fileName = `ADNAYA_${slug}_${stamp}.pdf`;
@@ -190,11 +188,7 @@ app.post('/generate-pdf', async (req, res) => {
     // PDF INIT
     // =======================
 
-    const doc = new PDFDocument({
-      size: 'A4',
-      margin: 55
-    });
-
+    const doc = new PDFDocument({ size: 'A4', margin: 55 });
     const stream = fs.createWriteStream(filePath);
     doc.pipe(stream);
 
@@ -205,19 +199,16 @@ app.post('/generate-pdf', async (req, res) => {
     const FONT_REGULAR_PATH = '/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf';
     const FONT_BOLD_PATH = '/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf';
 
-    const fontRegular = fs.existsSync(FONT_REGULAR_PATH)
-      ? FONT_REGULAR_PATH
-      : 'Helvetica';
-
-    const fontBold = fs.existsSync(FONT_BOLD_PATH)
-      ? FONT_BOLD_PATH
-      : 'Helvetica-Bold';
+    const fontRegular = fs.existsSync(FONT_REGULAR_PATH) ? FONT_REGULAR_PATH : 'Helvetica';
+    const fontBold = fs.existsSync(FONT_BOLD_PATH) ? FONT_BOLD_PATH : 'Helvetica-Bold';
 
     // =======================
-    // CLEAN TEXT + EMOJI FIX
+    // CLEAN TEXT
     // =======================
 
-    let cleanText = normalizeEmojis(text || "")
+    let cleanText = normalizeBullets(
+      normalizeEmojis(text || "")
+    )
       .replace(/\r\n/g, "\n")
       .replace(/\u0000/g, '')
       .replace(/\n{3,}/g, "\n\n")
@@ -238,19 +229,55 @@ app.post('/generate-pdf', async (req, res) => {
         return;
       }
 
+      // ---------- SEPARATOR ----------
+      if (line.startsWith('____')) {
+
+        doc.moveDown(1);
+
+        doc
+          .strokeColor('#cccccc')
+          .moveTo(55, doc.y)
+          .lineTo(540, doc.y)
+          .stroke();
+
+        doc.moveDown(1);
+        return;
+      }
+
+      // ---------- CONTACT BLOCK ----------
+      if (
+        line.includes('+243') ||
+        line.includes('@') ||
+        line.includes('Consultant') ||
+        line.includes('ADNAYA LLC –')
+      ) {
+
+        doc
+          .fillColor('#0A66C2')
+          .font(fontRegular)
+          .fontSize(11.5)
+          .text(line, { align: 'center' });
+
+        doc.moveDown(0.4);
+        return;
+      }
+
       // ---------- LIST ----------
       if (
-        line.startsWith('- ') ||
         line.startsWith('• ') ||
+        line.startsWith('- ') ||
         /^[0-9]+\./.test(line)
       ) {
+
+        const content = line.replace(/^•\s*/, '');
 
         doc
           .fillColor('#111111')
           .font(fontRegular)
           .fontSize(11.5)
-          .text(line, {
-            indent: 18,
+          .text('•', { continued: true })
+          .text(' ' + content, {
+            indent: 10,
             lineGap: 4,
             align: 'left'
           });
@@ -259,26 +286,41 @@ app.post('/generate-pdf', async (req, res) => {
         return;
       }
 
-      // ---------- TITLE ----------
-      if (
-        line.length < 65 &&
-        (
-          line === line.toUpperCase() ||
-          line.endsWith(':')
-        )
-      ) {
+      // ---------- STRONG TITLE ----------
+      const isStrongTitle =
+        line.length < 80 &&
+        line === line.toUpperCase() &&
+        !line.startsWith('•');
+
+      if (isStrongTitle) {
 
         doc.moveDown(0.6);
 
         doc
           .fillColor('#0A66C2')
           .font(fontBold)
-          .fontSize(13.5)
-          .text(line, {
-            align: 'left'
-          });
+          .fontSize(14)
+          .text(line);
 
         doc.moveDown(0.4);
+        return;
+      }
+
+      // ---------- TITLE ----------
+      if (
+        line.length < 65 &&
+        (line.endsWith(':'))
+      ) {
+
+        doc.moveDown(0.5);
+
+        doc
+          .fillColor('#333333')
+          .font(fontBold)
+          .fontSize(12.5)
+          .text(line);
+
+        doc.moveDown(0.3);
         return;
       }
 
@@ -358,6 +400,8 @@ app.post('/generate-pdf', async (req, res) => {
   }
 
 });
+
+
 // =======================
 // CLIENT REQUEST
 // =======================
