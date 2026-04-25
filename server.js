@@ -232,20 +232,20 @@ app.post('/generate-pdf', async (req, res) => {
     const fontBold = fs.existsSync(FONT_BOLD) ? FONT_BOLD : 'Helvetica-Bold';
 
     // =======================
-    // CLEAN TEXT (FIX GLOBAL)
+    // CLEAN TEXT (SAFE)
     // =======================
 
     let cleanText = normalizeEmojis(text || "")
       .replace(/\r\n/g, "\n")
 
-      // supprime caractères invisibles (□ etc.)
-      .replace(/[^\x20-\x7EÀ-ÿ\n]/g, '')
-
-      // corrige : • 1. → 1.
+      // 🔥 corrige : • 1. → 1.
       .replace(/•\s*([0-9]+\.)/g, '$1 ')
 
-      // espace propre après numérotation
+      // 🔥 espace propre après numérotation
       .replace(/([0-9]+\.)\s*/g, '$1 ')
+
+      // 🔥 supprime UNIQUEMENT caractères vraiment cassés
+      .replace(/\u0000/g, '')
 
       .replace(/\n{3,}/g, "\n\n")
       .trim();
@@ -384,6 +384,7 @@ app.post('/generate-pdf', async (req, res) => {
   }
 
 });
+
 // =======================
 // CLIENT REQUEST
 // =======================
