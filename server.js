@@ -138,6 +138,26 @@ app.post('/generate-pdf', async (req, res) => {
 
     const { text } = req.body;
 
+    // =======================
+    // EMOJI NORMALIZER
+    // =======================
+
+    function normalizeEmojis(input) {
+      return input
+        .replace(/🎯/g, '▶')
+        .replace(/🧬/g, '◆')
+        .replace(/🟢/g, '●')
+        .replace(/🟠/g, '●')
+        .replace(/🟡/g, '●')
+        .replace(/🔴/g, '●')
+        .replace(/🚀/g, '➤')
+        .replace(/⚠️/g, '⚠');
+    }
+
+    // =======================
+    // FILE NAME
+    // =======================
+
     const now = new Date();
 
     const stamp =
@@ -152,6 +172,7 @@ app.post('/generate-pdf', async (req, res) => {
     let slug = 'Document';
 
     if (firstLine) {
+
       slug = firstLine
         .replace(/[^a-zA-Z0-9À-ÿ ]/g, '')
         .trim()
@@ -178,21 +199,25 @@ app.post('/generate-pdf', async (req, res) => {
     doc.pipe(stream);
 
     // =======================
-    // FONT UNICODE (SAFE)
+    // FONT SAFE
     // =======================
 
-    const FONT_REGULAR = '/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf';
-    const FONT_BOLD = '/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf';
+    const FONT_REGULAR_PATH = '/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf';
+    const FONT_BOLD_PATH = '/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf';
 
-    // fallback sécurité si font absente
-    const fontRegular = fs.existsSync(FONT_REGULAR) ? FONT_REGULAR : 'Helvetica';
-    const fontBold = fs.existsSync(FONT_BOLD) ? FONT_BOLD : 'Helvetica-Bold';
+    const fontRegular = fs.existsSync(FONT_REGULAR_PATH)
+      ? FONT_REGULAR_PATH
+      : 'Helvetica';
+
+    const fontBold = fs.existsSync(FONT_BOLD_PATH)
+      ? FONT_BOLD_PATH
+      : 'Helvetica-Bold';
 
     // =======================
-    // CLEAN TEXT
+    // CLEAN TEXT + EMOJI FIX
     // =======================
 
-    let cleanText = (text || "")
+    let cleanText = normalizeEmojis(text || "")
       .replace(/\r\n/g, "\n")
       .replace(/\u0000/g, '')
       .replace(/\n{3,}/g, "\n\n")
@@ -201,7 +226,7 @@ app.post('/generate-pdf', async (req, res) => {
     const paragraphs = cleanText.split('\n');
 
     // =======================
-    // RENDER
+    // RENDER ENGINE
     // =======================
 
     paragraphs.forEach(p => {
@@ -213,7 +238,7 @@ app.post('/generate-pdf', async (req, res) => {
         return;
       }
 
-      // LIST
+      // ---------- LIST ----------
       if (
         line.startsWith('- ') ||
         line.startsWith('• ') ||
@@ -234,10 +259,13 @@ app.post('/generate-pdf', async (req, res) => {
         return;
       }
 
-      // TITLE
+      // ---------- TITLE ----------
       if (
         line.length < 65 &&
-        (line === line.toUpperCase() || line.endsWith(':'))
+        (
+          line === line.toUpperCase() ||
+          line.endsWith(':')
+        )
       ) {
 
         doc.moveDown(0.6);
@@ -246,13 +274,15 @@ app.post('/generate-pdf', async (req, res) => {
           .fillColor('#0A66C2')
           .font(fontBold)
           .fontSize(13.5)
-          .text(line, { align: 'left' });
+          .text(line, {
+            align: 'left'
+          });
 
         doc.moveDown(0.4);
         return;
       }
 
-      // PARAGRAPH
+      // ---------- PARAGRAPH ----------
       doc
         .fillColor('#222222')
         .font(fontRegular)
@@ -263,6 +293,7 @@ app.post('/generate-pdf', async (req, res) => {
         });
 
       doc.moveDown(0.5);
+
     });
 
     // =======================
