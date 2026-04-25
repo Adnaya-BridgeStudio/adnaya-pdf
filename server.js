@@ -138,10 +138,6 @@ app.post('/generate-pdf', async (req, res) => {
 
     const { text } = req.body;
 
-    // =======================
-    // FILE NAME
-    // =======================
-
     const now = new Date();
 
     const stamp =
@@ -156,7 +152,6 @@ app.post('/generate-pdf', async (req, res) => {
     let slug = 'Document';
 
     if (firstLine) {
-
       slug = firstLine
         .replace(/[^a-zA-Z0-9À-ÿ ]/g, '')
         .trim()
@@ -183,14 +178,25 @@ app.post('/generate-pdf', async (req, res) => {
     doc.pipe(stream);
 
     // =======================
+    // FONT UNICODE (SAFE)
+    // =======================
+
+    const FONT_REGULAR = '/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf';
+    const FONT_BOLD = '/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf';
+
+    // fallback sécurité si font absente
+    const fontRegular = fs.existsSync(FONT_REGULAR) ? FONT_REGULAR : 'Helvetica';
+    const fontBold = fs.existsSync(FONT_BOLD) ? FONT_BOLD : 'Helvetica-Bold';
+
+    // =======================
     // CLEAN TEXT
     // =======================
 
-let cleanText = (text || "")
-  .replace(/\r\n/g, "\n")
-  .replace(/\u0000/g, '') // supprime uniquement les caractères null
-  .replace(/\n{3,}/g, "\n\n")
-  .trim();
+    let cleanText = (text || "")
+      .replace(/\r\n/g, "\n")
+      .replace(/\u0000/g, '')
+      .replace(/\n{3,}/g, "\n\n")
+      .trim();
 
     const paragraphs = cleanText.split('\n');
 
@@ -214,10 +220,10 @@ let cleanText = (text || "")
         /^[0-9]+\./.test(line)
       ) {
 
-doc
-  .fillColor('#111111')
-  .font(FONT_REGULAR)
-  .fontSize(11.5)
+        doc
+          .fillColor('#111111')
+          .font(fontRegular)
+          .fontSize(11.5)
           .text(line, {
             indent: 18,
             lineGap: 4,
@@ -238,7 +244,7 @@ doc
 
         doc
           .fillColor('#0A66C2')
-          .font(FONT_BOLD)
+          .font(fontBold)
           .fontSize(13.5)
           .text(line, { align: 'left' });
 
@@ -249,7 +255,7 @@ doc
       // PARAGRAPH
       doc
         .fillColor('#222222')
-        .font('Helvetica')
+        .font(fontRegular)
         .fontSize(11.5)
         .text(line, {
           align: 'justify',
@@ -275,6 +281,7 @@ doc
 
     doc
       .fillColor('#666666')
+      .font(fontRegular)
       .fontSize(9)
       .text('Generated via ADNAYA PDF Engine', {
         align: 'center'
@@ -310,15 +317,16 @@ doc
 
   } catch (err) {
 
+    console.error("PDF ERROR:", err);
+
     return res.status(500).json({
       success: false,
-      error: 'Erreur serveur'
+      error: 'Erreur serveur PDF'
     });
 
   }
 
 });
-
 // =======================
 // CLIENT REQUEST
 // =======================
