@@ -129,7 +129,7 @@ app.get('/', (req, res) => {
 });
 
 // =======================
-// PDF ENGINE PRO FINAL
+// PDF ENGINE PRO FINAL (COULEURS + TABLES)
 // =======================
 
 app.post('/generate-pdf', async (req, res) => {
@@ -176,20 +176,17 @@ app.post('/generate-pdf', async (req, res) => {
     const fontBold = fs.existsSync(FONT_BOLD) ? FONT_BOLD : 'Helvetica-Bold';
 
     // =======================
-    // CLEAN TEXT (CRITICAL FIX)
+    // CLEAN TEXT
     // =======================
 
     let cleanText = normalizeEmojis(text || "")
 
-      // 🔥 suppression ASCII tables
       .replace(/^[\|\-\+\s]+$/gm, '')
       .replace(/\+-[-+\s]+\+/g, '')
 
-      // 🔥 bullets
       .replace(/•/g, '-')
       .replace(/-\s*/g, '- ')
 
-      // 🔥 normalisation
       .replace(/\r\n/g, "\n")
       .replace(/\n{3,}/g, "\n\n")
       .trim();
@@ -217,7 +214,6 @@ app.post('/generate-pdf', async (req, res) => {
 
         let rowHeight = 20;
 
-        // auto height
         row.forEach(cell => {
           const h = doc.heightOfString(cell, {
             width: colWidth - 10
@@ -225,14 +221,14 @@ app.post('/generate-pdf', async (req, res) => {
           rowHeight = Math.max(rowHeight, h + 10);
         });
 
-        // HEADER
+        // HEADER (BLEU)
         if (rowIndex === 0) {
-          doc.rect(startX, y, tableWidth, rowHeight).fill('#eaeaea');
+          doc.rect(startX, y, tableWidth, rowHeight).fill('#0A66C2');
         }
 
         // ZEBRA
-        if (rowIndex % 2 === 1) {
-          doc.rect(startX, y, tableWidth, rowHeight).fill('#f9f9f9');
+        if (rowIndex % 2 === 1 && rowIndex !== 0) {
+          doc.rect(startX, y, tableWidth, rowHeight).fill('#f4f8ff');
         }
 
         row.forEach((cell, i) => {
@@ -244,7 +240,7 @@ app.post('/generate-pdf', async (req, res) => {
           doc
             .font(rowIndex === 0 ? fontBold : fontRegular)
             .fontSize(10.5)
-            .fillColor('#222222')
+            .fillColor(rowIndex === 0 ? '#ffffff' : '#333333')
             .text(cell, x + 5, y + 5, {
               width: colWidth - 10,
               align: i === 0 ? 'left' : 'right'
@@ -273,7 +269,7 @@ app.post('/generate-pdf', async (req, res) => {
         return;
       }
 
-      // ===== TABLE ASCII =====
+      // TABLE ASCII
       if (trimmed.includes('|')) {
 
         const cols = trimmed
@@ -283,7 +279,6 @@ app.post('/generate-pdf', async (req, res) => {
 
         if (cols.length >= 2) {
 
-          // 🔥 merge broken lines
           if (tableBuffer.length > 0) {
             const lastRow = tableBuffer[tableBuffer.length - 1];
 
@@ -298,7 +293,7 @@ app.post('/generate-pdf', async (req, res) => {
         }
       }
 
-      // ===== TABLE SPACES =====
+      // TABLE SPACES
       const cols = trimmed.split(/\s{2,}|\t/);
 
       if (cols.length >= 3 || /\d+\s+\w+/.test(trimmed)) {
@@ -316,32 +311,45 @@ app.post('/generate-pdf', async (req, res) => {
         return;
       }
 
-      // ===== END TABLE =====
+      // FLUSH TABLE
       drawTable(tableBuffer);
 
-      // ===== LIST =====
+      // LIST
       if (trimmed.startsWith('- ')) {
-        doc.font(fontRegular).text(trimmed, { indent: 18 });
+        doc
+          .fillColor('#333333')
+          .font(fontRegular)
+          .text(trimmed, { indent: 18 });
         doc.moveDown(0.3);
         return;
       }
 
-      // ===== TITLE =====
+      // TITLE (BLEU)
       if (
         trimmed.length < 65 &&
         (trimmed === trimmed.toUpperCase() || trimmed.endsWith(':'))
       ) {
         doc.moveDown(0.6);
-        doc.font(fontBold).fontSize(13.5).text(trimmed);
+
+        doc
+          .fillColor('#0A66C2')
+          .font(fontBold)
+          .fontSize(13.5)
+          .text(trimmed);
+
         doc.moveDown(0.4);
         return;
       }
 
-      // ===== PARAGRAPH =====
-      doc.font(fontRegular).fontSize(11.5).text(trimmed, {
-        align: 'justify',
-        lineGap: 5
-      });
+      // PARAGRAPH
+      doc
+        .fillColor('#333333')
+        .font(fontRegular)
+        .fontSize(11.5)
+        .text(trimmed, {
+          align: 'justify',
+          lineGap: 5
+        });
 
       doc.moveDown(0.5);
 
