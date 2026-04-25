@@ -129,7 +129,7 @@ app.get('/', (req, res) => {
 });
 
 // =======================
-// PDF ENGINE PRO FINAL (COULEURS + TABLES)
+// PDF ENGINE FINAL LOCKED (UX + DESIGN + STABILITY)
 // =======================
 
 app.post('/generate-pdf', async (req, res) => {
@@ -137,10 +137,6 @@ app.post('/generate-pdf', async (req, res) => {
   try {
 
     const { text } = req.body;
-
-    // =======================
-    // NORMALIZE EMOJIS
-    // =======================
 
     function normalizeEmojis(input) {
       return input
@@ -157,10 +153,6 @@ app.post('/generate-pdf', async (req, res) => {
         .replace(/🌐/g, '⌘');
     }
 
-    // =======================
-    // INIT
-    // =======================
-
     const doc = new PDFDocument({ size: 'A4', margin: 55 });
 
     const fileName = `ADNAYA_${Date.now()}.pdf`;
@@ -175,27 +167,18 @@ app.post('/generate-pdf', async (req, res) => {
     const fontRegular = fs.existsSync(FONT_REGULAR) ? FONT_REGULAR : 'Helvetica';
     const fontBold = fs.existsSync(FONT_BOLD) ? FONT_BOLD : 'Helvetica-Bold';
 
-    // =======================
-    // CLEAN TEXT
-    // =======================
-
     let cleanText = normalizeEmojis(text || "")
 
-      .replace(/^[\|\-\+\s]+$/gm, '')
-      .replace(/\+-[-+\s]+\+/g, '')
+      // remove ascii lines
+      .replace(/^[\|\-\+\=\s]+$/gm, '')
 
       .replace(/•/g, '-')
       .replace(/-\s*/g, '- ')
-
       .replace(/\r\n/g, "\n")
       .replace(/\n{3,}/g, "\n\n")
       .trim();
 
     const lines = cleanText.split('\n');
-
-    // =======================
-    // TABLE SYSTEM
-    // =======================
 
     let tableBuffer = [];
 
@@ -221,14 +204,20 @@ app.post('/generate-pdf', async (req, res) => {
           rowHeight = Math.max(rowHeight, h + 10);
         });
 
-        // HEADER (BLEU)
-        if (rowIndex === 0) {
-          doc.rect(startX, y, tableWidth, rowHeight).fill('#0A66C2');
+        // 🔥 PAGE BREAK FIX
+        if (y + rowHeight > doc.page.height - 60) {
+          doc.addPage();
+          y = 55;
         }
 
-        // ZEBRA
+        // HEADER (lighter blue)
+        if (rowIndex === 0) {
+          doc.rect(startX, y, tableWidth, rowHeight).fill('#2F6FED');
+        }
+
+        // ZEBRA (grey)
         if (rowIndex % 2 === 1 && rowIndex !== 0) {
-          doc.rect(startX, y, tableWidth, rowHeight).fill('#f4f8ff');
+          doc.rect(startX, y, tableWidth, rowHeight).fill('#f5f5f5');
         }
 
         row.forEach((cell, i) => {
@@ -251,21 +240,30 @@ app.post('/generate-pdf', async (req, res) => {
         y += rowHeight;
       });
 
-      doc.y = y + 10;
+      doc.moveDown(1);
+      doc.x = 55; // 🔥 reset position
       tableBuffer = [];
     }
 
-    // =======================
-    // RENDER
-    // =======================
-
-    lines.forEach(line => {
+    lines.forEach((line, index) => {
 
       const trimmed = line.trim();
 
       if (!trimmed) {
         drawTable(tableBuffer);
         doc.moveDown(0.5);
+        return;
+      }
+
+      // 🔥 MAIN TITLE
+      if (index === 0) {
+        doc
+          .font(fontBold)
+          .fontSize(18)
+          .fillColor('#111111')
+          .text(trimmed, { align: 'center' });
+
+        doc.moveDown(1);
         return;
       }
 
@@ -278,16 +276,6 @@ app.post('/generate-pdf', async (req, res) => {
           .filter(Boolean);
 
         if (cols.length >= 2) {
-
-          if (tableBuffer.length > 0) {
-            const lastRow = tableBuffer[tableBuffer.length - 1];
-
-            if (cols.length < lastRow.length) {
-              lastRow[lastRow.length - 1] += ' ' + cols.join(' ');
-              return;
-            }
-          }
-
           tableBuffer.push(cols);
           return;
         }
@@ -297,21 +285,10 @@ app.post('/generate-pdf', async (req, res) => {
       const cols = trimmed.split(/\s{2,}|\t/);
 
       if (cols.length >= 3 || /\d+\s+\w+/.test(trimmed)) {
-
-        if (tableBuffer.length > 0) {
-          const lastRow = tableBuffer[tableBuffer.length - 1];
-
-          if (cols.length < lastRow.length) {
-            lastRow[lastRow.length - 1] += ' ' + cols.join(' ');
-            return;
-          }
-        }
-
         tableBuffer.push(cols);
         return;
       }
 
-      // FLUSH TABLE
       drawTable(tableBuffer);
 
       // LIST
@@ -324,7 +301,7 @@ app.post('/generate-pdf', async (req, res) => {
         return;
       }
 
-      // TITLE (BLEU)
+      // TITLE
       if (
         trimmed.length < 65 &&
         (trimmed === trimmed.toUpperCase() || trimmed.endsWith(':'))
@@ -357,10 +334,7 @@ app.post('/generate-pdf', async (req, res) => {
 
     drawTable(tableBuffer);
 
-    // =======================
-    // SIGNATURE
-    // =======================
-
+    // SIGNATURE (left aligned)
     doc.moveDown(2);
 
     doc
@@ -375,13 +349,9 @@ app.post('/generate-pdf', async (req, res) => {
       .font(fontRegular)
       .fontSize(9)
       .fillColor('#666666')
-      .text('Generated via ADNAYA PDF Engine', { align: 'center' });
+      .text('Generated via ADNAYA PDF Engine', 55, doc.y);
 
     doc.end();
-
-    // =======================
-    // UPLOAD
-    // =======================
 
     stream.on('finish', async () => {
 
